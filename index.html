@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#e7ebf0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1318" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="單字卡">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0}
@@ -79,6 +87,8 @@ h2{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.06em;margin
 .lib-item .sub{margin:0}
 .prev{color:var(--muted);font-family:var(--font-display);font-size:13px;overflow-wrap:anywhere}
 .lib-actions{display:flex;gap:8px;flex-wrap:wrap}
+.install{background:var(--surface);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.install p{margin:0;color:var(--soft)}
 .topnav{display:flex;align-items:center;gap:8px}
 .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--fg)}
 .iconbtn:hover{background:var(--surface-2)}
@@ -168,6 +178,7 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
 @keyframes enter{from{transform:scale(.965);opacity:.4}to{transform:none;opacity:1}}
 .flip{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .35s ease;perspective:1200px}
 .card.flipped .flip{transform:rotateY(180deg)}
+.card.snap .flip{transition:none}
 .face{position:absolute;inset:0;background:var(--paper);border-radius:10px;box-shadow:var(--card-shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:52px 28px 72px;text-align:center;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
 .face::before{content:"";position:absolute;left:0;right:0;top:44px;height:1px;background:var(--baseline);opacity:.55}
 .face.back{transform:rotateY(180deg)}
@@ -269,7 +280,7 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
     provider.setCustomParameters({prompt:'select_account'});
     let cur=null;
     const authReady=new Promise(res=>{ Au.onAuthStateChanged(auth,u=>{ cur=u; res(); }); });
-    try{ await Au.getRedirectResult(auth); }catch(e){}
+    try{ await Promise.race([Au.getRedirectResult(auth),new Promise(r=>setTimeout(r,5000))]); }catch(e){}
     window.__fbResolve({
       authReady,
       user:()=>cur?{uid:cur.uid,name:cur.displayName||'',email:cur.email||''}:null,
@@ -281,7 +292,12 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
         }
       },
       async signOut(){ await Au.signOut(auth); cur=null; },
-      async load(){ const snap=await Fs.getDocs(Fs.collection(db,'users',cur.uid,'units')); return snap.docs.map(d=>Object.assign({id:d.id},d.data())); },
+      async load(){
+        const col=Fs.collection(db,'users',cur.uid,'units'); let snap=null;
+        if(!navigator.onLine){ try{ snap=await Fs.getDocsFromCache(col); }catch(e){} }
+        if(!snap){ try{ snap=await Fs.getDocs(col); }catch(e){ snap=await Fs.getDocsFromCache(col); } }
+        return snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+      },
       save:(u)=>Fs.setDoc(Fs.doc(db,'users',cur.uid,'units',u.id),u),
       remove:(id)=>Fs.deleteDoc(Fs.doc(db,'users',cur.uid,'units',id)),
       async libList(){ const snap=await Fs.getDocs(Fs.collection(db,'library')); return snap.docs.map(d=>Object.assign({id:d.id},d.data())); },
@@ -414,6 +430,46 @@ async function doSignOut(){
   toast('已登出，你的單元仍保存在 Google 帳號中');
   go('home');
 }
+/* ---------- PWA: install prompt + service worker ---------- */
+let deferredInstall=null;
+const INSTALL_KEY='vocab-cards-install-dismissed';
+window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredInstall=e; if(state.view==='home') render(); });
+window.addEventListener('appinstalled',()=>{ deferredInstall=null; toast('已安裝到主畫面'); if(state.view==='home') render(); });
+const isStandalone=()=>{ try{ return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true; }catch(e){ return false; } };
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+function dismissInstall(){ try{ localStorage.setItem(INSTALL_KEY,'1'); }catch(e){} deferredInstall=null; if(state.view==='home') render(); }
+function installBanner(){
+  if(window.claude||isStandalone()) return null;
+  try{ if(localStorage.getItem(INSTALL_KEY)==='1') return null; }catch(e){}
+  if(deferredInstall){
+    return h('section',{class:'install'},
+      h('p',{text:'安裝成 App：主畫面有圖示、全螢幕開啟，沒有網路也能複習。'}),
+      h('div',{class:'row-actions'},
+        h('button',{class:'btn primary',onclick:async()=>{ const ev=deferredInstall; if(!ev) return; try{ ev.prompt(); await ev.userChoice; }catch(e){} deferredInstall=null; if(state.view==='home') render(); }},'安裝'),
+        h('button',{class:'btn',onclick:dismissInstall},'之後再說')));
+  }
+  if(isIOS()){
+    return h('section',{class:'install'},
+      h('p',{text:'安裝成 App：點瀏覽器的「分享」圖示，選「加入主畫面」，之後像 App 一樣全螢幕開啟，沒有網路也能複習。'}),
+      h('div',{class:'row-actions'},h('button',{class:'btn',onclick:dismissInstall},'知道了')));
+  }
+  return null;
+}
+(function registerSW(){
+  if(window.claude||!('serviceWorker' in navigator)||!/^https?:$/.test(location.protocol)) return;
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(()=>navigator.serviceWorker.ready).then(reg=>{
+      /* the first visit loaded Firebase and fonts before the worker took control; ask it to keep those too */
+      setTimeout(()=>{
+        try{
+          const urls=performance.getEntriesByType('resource').map(e=>e.name).filter(u=>/^https:\/\/(www\.gstatic\.com\/firebasejs\/|fonts\.googleapis\.com\/|fonts\.gstatic\.com\/)/.test(u));
+          if(reg.active&&urls.length) reg.active.postMessage({type:'cache',urls:Array.from(new Set(urls))});
+        }catch(e){}
+      },3000);
+    }).catch(()=>{});
+  });
+})();
+
 /* ---------- public library ---------- */
 const ADMIN_EMAIL='pixel9profold20240813@gmail.com';
 const isAdmin=()=>{ const u=FB&&FB.user(); return !!(u&&u.email&&u.email.toLowerCase()===ADMIN_EMAIL); };
@@ -515,9 +571,8 @@ function flush(id){
   const u=pending.get(id); if(!u) return Promise.resolve();
   pending.delete(id);
   if(!dbc&&isFB()){
-    const body=JSON.parse(JSON.stringify(u));
-    const p=(chains.get(id)||Promise.resolve()).then(()=>FB.save(body)).catch(()=>{ toast('雲端儲存失敗，請檢查網路連線'); });
-    chains.set(id,p); return Promise.resolve();
+    FB.save(JSON.parse(JSON.stringify(u))).catch(()=>{ toast('雲端儲存失敗，請檢查網路連線'); });
+    return Promise.resolve();
   }
   if(!dbc){ lsSave(); return Promise.resolve(); }
   const body=JSON.parse(JSON.stringify(u));
@@ -530,7 +585,7 @@ function flushAll(){ for(const id of Array.from(pending.keys())) flush(id); }
 function removeUnit(id){
   state.units=state.units.filter(u=>u.id!==id); pending.delete(id);
   if(dbc){ const p=(chains.get(id)||Promise.resolve()).then(()=>dbc&&dbc.doc(id).delete()).catch(()=>{ toast('刪除同步失敗，重新整理後可能還會出現'); }); chains.set(id,p); }
-  else if(isFB()){ const p=(chains.get(id)||Promise.resolve()).then(()=>FB.remove(id)).catch(()=>{ toast('刪除同步失敗，重新整理後可能還會出現'); }); chains.set(id,p); }
+  else if(isFB()){ FB.remove(id).catch(()=>{ toast('刪除同步失敗，重新整理後可能還會出現'); }); }
   else lsSave();
 }
 document.addEventListener('visibilitychange',()=>{
@@ -654,6 +709,7 @@ function renderHome(){
   page.append(h('header',{class:'head'},
     h('div',{},h('h1',{text:'單字卡複習'}),h('p',{class:'sub',text:storageLabel()})),
     h('div',{class:'head-actions'},accountBox(),FB?h('button',{class:'btn',onclick:()=>go('library')},'單字庫'):null,h('button',{class:'btn primary',onclick:()=>go('import')},ic('plus'),'匯入單元'))));
+  const ib=installBanner(); if(ib) page.append(ib);
   if(!state.units.length){
     page.append(h('section',{class:'empty'},
       h('h2',{text:'還沒有單元'}),
@@ -860,7 +916,11 @@ function fillFaces(){
     UI.front.append(tag(),zh());
     UI.back.append(tag(),staff(w.word),meta(),ex());
   }
+  /* a new card must start on its front immediately; only a tap may animate the flip */
+  UI.card.classList.add('snap');
   UI.card.classList.toggle('flipped',S.flipped);
+  void UI.card.offsetWidth;
+  UI.card.classList.remove('snap');
   requestAnimationFrame(fitAll);
 }
 function sync(enter){
