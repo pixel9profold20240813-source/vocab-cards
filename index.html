@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>單字卡複習</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-screen app. Home = unit list, Unit = stats + word list, Study = full-height swipe card (top scrubber, centered card, bottom action bar). */
+:root{
+  --font-display:"Outfit","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --font-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --bg:#0e0e0f; --surface:#171718; --surface-2:#212123; --line:#2c2c2f;
+  --fg:#ececee; --muted:#8d8d93; --soft:#b9b9bf;
+  --good:#9be3ab; --good-ink:#0d3a1b; --good-solid:#6fd08a;
+  --bad:#f29090; --bad-ink:#4a1111; --bad-solid:#ef7f7f;
+  --new:#38383c; --focus:#8fb4ff;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f3f4f5; --surface:#ffffff; --surface-2:#eceef0; --line:#dcdfe2;
+    --fg:#18191b; --muted:#6b6f76; --soft:#41454b;
+    --good:#8edba3; --good-ink:#0b3a1a; --good-solid:#238a4c;
+    --bad:#f19a9a; --bad-ink:#4a1111; --bad-solid:#c8403d;
+    --new:#cfd3d7; --focus:#2f6fe0;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f3f4f5; --surface:#ffffff; --surface-2:#eceef0; --line:#dcdfe2;
+  --fg:#18191b; --muted:#6b6f76; --soft:#41454b;
+  --good:#8edba3; --good-ink:#0b3a1a; --good-solid:#238a4c;
+  --bad:#f19a9a; --bad-ink:#4a1111; --bad-solid:#c8403d;
+  --new:#cfd3d7; --focus:#2f6fe0;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.5;padding-inline:16px;-webkit-tap-highlight-color:transparent}
+#app{min-height:100%}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ic{display:inline-flex;width:22px;height:22px;flex:none}
+.ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+.page{max-width:640px;margin-inline:auto;padding-block:20px 48px;display:flex;flex-direction:column;gap:20px}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--font-display);font-size:26px;line-height:1.2;font-weight:600;margin:0;text-wrap:balance}
+h2{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.06em;margin:0 0 8px}
+.sub{margin:4px 0 0;color:var(--muted);font-size:13px}
+.topnav{display:flex;align-items:center;gap:8px}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--fg)}
+.iconbtn:hover{background:var(--surface-2)}
+.iconbtn:disabled{opacity:.35;cursor:default}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:500}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--fg);color:var(--bg);border-color:transparent}
+.btn.danger{color:var(--bad-solid)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.block{width:100%}
+.row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.row-actions .btn{flex:1 1 150px}
+
+.units{background:var(--surface);border-radius:16px;overflow:hidden}
+.unit{display:flex;flex-direction:column;gap:10px;width:100%;text-align:left;background:transparent;border:0;border-top:1px solid var(--line);padding:16px;min-width:0}
+.unit:first-child{border-top:0}
+.unit:hover{background:var(--surface-2)}
+.unit .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.unit .name{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.unit .n{font-family:var(--font-display);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.legend b{font-weight:500;color:var(--fg)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--new)}
+.dot.u{background:var(--bad-solid)} .dot.k{background:var(--good-solid)}
+
+.stripe{display:flex;gap:1px;height:8px;width:100%}
+.stripe i{flex:1 1 0;min-width:1px;background:var(--new);border-radius:1px}
+.stripe i.s-k{background:var(--good-solid)}
+.stripe i.s-u{background:var(--bad-solid)}
+.stripe.dense{gap:0}
+
+.empty{background:var(--surface);border-radius:16px;padding:24px 20px;display:flex;flex-direction:column;gap:14px}
+.empty p{margin:0;color:var(--soft)}
+.empty h2{font-size:18px;color:var(--fg);letter-spacing:0;font-weight:700;margin:0}
+
+textarea{width:100%;min-height:200px;resize:vertical;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.55}
+.err{color:var(--bad-solid);font-size:14px;margin:0;overflow-wrap:anywhere}
+.codebox{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.codebox pre{margin:0;padding:12px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.codebox .btn{margin:0 12px 12px;min-height:38px}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+details summary{cursor:pointer;color:var(--soft);padding-block:6px}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--surface);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:2px}
+.stat .v{font-family:var(--font-display);font-size:26px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .l{font-size:12.5px;color:var(--muted)}
+.stat.u .v{color:var(--bad-solid)} .stat.k .v{color:var(--good-solid)}
+.seg{display:inline-flex;background:var(--surface-2);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;border-radius:8px;min-height:36px;padding:0 14px;color:var(--muted);font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--fg)}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.opt span{color:var(--soft)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{border:1px solid var(--line);background:transparent;border-radius:999px;min-height:36px;padding:0 14px;font-size:13.5px;color:var(--soft);font-variant-numeric:tabular-nums}
+.tabs button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:transparent}
+.words{background:var(--surface);border-radius:16px;overflow:hidden}
+.wrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.wrow:first-child{border-top:0}
+.wrow .w{font-family:var(--font-display);font-weight:500;font-size:16px;overflow-wrap:anywhere}
+.wrow .w small{display:block;font-family:var(--font-body);font-size:12px;color:var(--muted);font-weight:400}
+.wrow .m{color:var(--soft);overflow-wrap:anywhere}
+.chip{font-size:12px;border-radius:999px;padding:2px 10px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.chip.u{background:var(--bad);color:var(--bad-ink)} .chip.k{background:var(--good);color:var(--good-ink)}
+.none{padding:20px;text-align:center;color:var(--muted)}
+
+/* Study */
+.study{height:100%;max-width:1100px;margin-inline:auto;display:flex;flex-direction:column;gap:12px;padding-block:12px 16px}
+.topbar{display:flex;align-items:center;gap:12px}
+.scrub{flex:1;min-width:0;height:28px;margin:0;-webkit-appearance:none;appearance:none;background:transparent;--p:0%}
+.scrub::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--soft) var(--p),var(--line) var(--p))}
+.scrub::-moz-range-track{height:4px;border-radius:2px;background:var(--line)}
+.scrub::-moz-range-progress{height:4px;border-radius:2px;background:var(--soft)}
+.scrub::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--surface);border:1.5px solid var(--muted);margin-top:-9px}
+.scrub::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--surface);border:1.5px solid var(--muted)}
+.pos{font-family:var(--font-display);font-size:17px;color:var(--soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px 0 10px;border-radius:999px;font-family:var(--font-display);font-size:17px;font-variant-numeric:tabular-nums}
+.pill .ic{width:16px;height:16px}
+.pill.bad{background:var(--bad);color:var(--bad-ink)}
+.pill.good{background:var(--good);color:var(--good-ink)}
+.stage{position:relative;flex:1;min-height:0}
+.card{position:absolute;inset:0;margin:auto;width:min(100%,720px);height:min(100%,560px);touch-action:pan-y;cursor:grab;user-select:none;-webkit-user-select:none;will-change:transform}
+.card:active{cursor:grabbing}
+.card.enter{animation:enter .18s ease-out}
+@keyframes enter{from{transform:scale(.965);opacity:.4}to{transform:none;opacity:1}}
+.flip{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .35s ease;perspective:1200px}
+.card.flipped .flip{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;background:var(--surface);border-radius:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 28px 72px;text-align:center;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
+.face.back{transform:rotateY(180deg)}
+.big-en{font-family:var(--font-display);font-weight:400;font-size:clamp(34px,8vw,58px);line-height:1.15;overflow-wrap:anywhere;margin:0}
+.big-zh{font-family:var(--font-body);font-weight:500;font-size:clamp(28px,6vw,46px);line-height:1.3;overflow-wrap:anywhere;margin:0;text-wrap:balance}
+.meta{color:var(--muted);font-size:15px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;min-height:1.5em}
+.ex{color:var(--soft);font-size:15px;max-width:34em;margin:0}
+.ex small{display:block;color:var(--muted);font-size:14px}
+.hint{position:absolute;top:18px;left:0;right:0;text-align:center;color:var(--muted);font-size:12.5px;pointer-events:none}
+.tint{position:absolute;inset:0;border-radius:28px;opacity:0;pointer-events:none;display:flex;align-items:flex-start;justify-content:center;padding-top:22px;font-weight:700;font-size:18px;z-index:2}
+.tint.good{background:color-mix(in srgb,var(--good) 24%,transparent);box-shadow:inset 0 0 0 2px var(--good-solid);color:var(--good-solid)}
+.tint.bad{background:color-mix(in srgb,var(--bad) 24%,transparent);box-shadow:inset 0 0 0 2px var(--bad-solid);color:var(--bad-solid)}
+.tools{position:absolute;right:20px;bottom:18px;display:flex;gap:4px;z-index:3}
+.tools .iconbtn{color:var(--soft)}
+.tools .iconbtn[aria-pressed="true"]{color:var(--fg);background:var(--surface-2)}
+.bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.bar .undo{justify-self:start;display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;min-height:48px;padding:0 8px 0 4px;border-radius:12px;font-size:16px}
+.bar .undo:disabled{opacity:.35;cursor:default}
+.answer{display:flex;gap:10px}
+.round{width:60px;height:60px;border-radius:50%;border:0;background:var(--surface-2);display:inline-flex;align-items:center;justify-content:center}
+.round.bad{color:var(--bad-solid)} .round.good{color:var(--good-solid)}
+.round:hover{background:var(--line)}
+.round .ic{width:28px;height:28px}
+.track{justify-self:end;display:inline-flex;align-items:center;gap:10px;border:0;background:transparent;min-height:48px;font-size:14px;text-align:right;min-width:0}
+.sw{width:46px;height:28px;border-radius:14px;background:var(--surface-2);position:relative;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.track[aria-checked="true"] .sw{background:var(--fg)}
+.track[aria-checked="true"] .sw::after{transform:translateX(18px);background:var(--bg)}
+
+.summary{max-width:480px;margin-inline:auto;padding-block:48px;display:flex;flex-direction:column;gap:20px;align-items:stretch}
+.summary .nums{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.summary .stat .v{font-size:40px}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100% - 32px);text-align:center;z-index:50}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (max-width:520px){
+  .track{font-size:13px;max-width:150px}
+  .round{width:54px;height:54px}
+  .face{padding:28px 20px 68px}
+  .wrow{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
+  .wrow .m{grid-column:1;grid-row:2}
+  .wrow .chip{grid-column:2;grid-row:1 / span 2}
+}
+@media (prefers-reduced-motion: reduce){
+  .flip,.sw,.sw::after,.toast{transition:none}
+  .card.enter{animation:none}
+}
+</style>
+
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- helpers ---------- */
+const ICON={
+  x:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  check:'<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  undo:'<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>',
+  shuffle:'<svg viewBox="0 0 24 24"><path d="M3 7h3c3 0 4 2 6 5s3 5 6 5h3"/><path d="M18 14l3 3-3 3"/><path d="M3 17h3c1.5 0 2.5-.6 3.4-1.6"/><path d="M14.6 8.6C15.5 7.6 16.5 7 18 7h3"/><path d="M18 4l3 3-3 3"/></svg>',
+  speaker:'<svg viewBox="0 0 24 24"><path d="M4 10v4h3.5L12 18V6L7.5 10H4z"/><path d="M15.5 9a4 4 0 010 6"/><path d="M18 6.5a7.5 7.5 0 010 11"/></svg>',
+  back:'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+  plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  play:'<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
+  copy:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/></svg>'
+};
+function h(tag,props,...kids){
+  const el=document.createElement(tag);
+  if(props) for(const k in props){
+    const v=props[k]; if(v==null||v===false) continue;
+    if(k==='class') el.className=v;
+    else if(k==='text') el.textContent=v;
+    else if(k==='html') el.innerHTML=v;
+    else if(k.slice(0,2)==='on') el.addEventListener(k.slice(2),v);
+    else el.setAttribute(k,v===true?'':v);
+  }
+  for(const kid of kids.flat()){ if(kid==null||kid===false) continue; el.append(kid.nodeType?kid:document.createTextNode(String(kid))); }
+  return el;
+}
+const ic=(n)=>h('span',{class:'ic',html:ICON[n],'aria-hidden':'true'});
+const reduceMotion=()=>{ try{return matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){return false} };
+let toastTimer=0;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
+function armConfirm(btn,armedLabel,fn){
+  const label=btn.textContent; let armed=false,timer=0;
+  btn.addEventListener('click',()=>{
+    if(!armed){ armed=true; btn.textContent=armedLabel; timer=setTimeout(()=>{armed=false;btn.textContent=label},3500); return; }
+    clearTimeout(timer); armed=false; btn.textContent=label; fn();
+  });
+}
+
+/* ---------- state ---------- */
+const state={units:[],view:'loading',unitId:null,storage:'loading',front:'en',filter:'all',fallbackName:''};
+const LS_KEY='vocab-cards-units-v1', LS_PREF='vocab-cards-prefs-v1';
+const unit=()=>state.units.find(u=>u.id===state.unitId);
+function counts(u){ let k=0,b=0; for(let i=0;i<u.words.length;i++){ const s=u.status[i]; if(s==='k')k++; else if(s==='u')b++; } return {k,u:b,n:u.words.length-k-b,total:u.words.length}; }
+
+/* ---------- storage: account database when available, otherwise this browser ---------- */
+let dbc=null;
+function lsLoad(){ try{ const v=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+function lsSave(){ try{ localStorage.setItem(LS_KEY,JSON.stringify(state.units)); if(state.storage==='memory') state.storage='local'; }catch(e){ state.storage='memory'; } }
+function loadPrefs(){ try{ const p=JSON.parse(localStorage.getItem(LS_PREF)||'{}'); if(p.front==='zh'||p.front==='en') state.front=p.front; }catch(e){} }
+function savePrefs(){ try{ localStorage.setItem(LS_PREF,JSON.stringify({front:state.front})); }catch(e){} }
+async function initStorage(){
+  loadPrefs();
+  try{
+    if(window.claude && window.claude.use){
+      const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+      const id=user?await user.id():null;
+      if(db&&id) dbc=db.collection('data/users/'+id);
+    }
+  }catch(e){ dbc=null; }
+  if(dbc){
+    try{
+      const snap=await dbc.get();
+      state.units=snap.docs.map(d=>Object.assign({id:d.id},JSON.parse(JSON.stringify(d.data()))));
+      state.storage='cloud';
+    }catch(e){ dbc=null; }
+  }
+  if(!dbc){
+    state.units=lsLoad(); state.storage='local';
+    try{ localStorage.setItem('vocab-cards-probe','1'); localStorage.removeItem('vocab-cards-probe'); }catch(e){ state.storage='memory'; }
+  }
+  state.units.forEach(u=>{ u.status=u.status||{}; u.words=u.words||[]; });
+  state.units.sort((a,b)=>(b.created||0)-(a.created||0));
+}
+const pending=new Map(), timers=new Map(), chains=new Map();
+function saveUnit(u,now){
+  pending.set(u.id,u); clearTimeout(timers.get(u.id));
+  if(now) return flush(u.id);
+  timers.set(u.id,setTimeout(()=>flush(u.id),600));
+}
+function flush(id){
+  clearTimeout(timers.get(id));
+  const u=pending.get(id); if(!u) return Promise.resolve();
+  pending.delete(id);
+  if(!dbc){ lsSave(); return Promise.resolve(); }
+  const body=JSON.parse(JSON.stringify(u));
+  const p=(chains.get(id)||Promise.resolve())
+    .then(()=>dbc&&dbc.doc(id).set(body))
+    .catch(()=>{ if(dbc){ dbc=null; state.storage='local'; lsSave(); toast('帳號儲存失敗，已改存在這個瀏覽器'); if(state.view==='home') render(); } });
+  chains.set(id,p); return p;
+}
+function flushAll(){ for(const id of Array.from(pending.keys())) flush(id); }
+function removeUnit(id){
+  state.units=state.units.filter(u=>u.id!==id); pending.delete(id);
+  if(dbc){ const p=(chains.get(id)||Promise.resolve()).then(()=>dbc&&dbc.doc(id).delete()).catch(()=>{ toast('刪除同步失敗，重新整理後可能還會出現'); }); chains.set(id,p); }
+  else lsSave();
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushAll(); });
+window.addEventListener('pagehide',flushAll);
+
+/* ---------- import ---------- */
+const PICK=(o,keys)=>{ for(const k of keys){ if(o[k]!=null && String(o[k]).trim()!=='') return String(o[k]).trim(); } return ''; };
+function normWord(w){
+  if(Array.isArray(w)){ if(w.length<2) return null; w={word:w[0],meaning:w[1],pos:w[2]}; }
+  if(!w||typeof w!=='object') return null;
+  const word=PICK(w,['word','english','en','term','vocab']);
+  const meaning=PICK(w,['meaning','chinese','zh','translation','definition','cn']);
+  if(!word||!meaning) return null;
+  const o={word,meaning};
+  const pos=PICK(w,['pos','partOfSpeech','part_of_speech']); if(pos) o.pos=pos;
+  const ph=PICK(w,['phonetic','kk','ipa','pronunciation']); if(ph) o.phonetic=ph;
+  const ex=PICK(w,['example','sentence','eg']); if(ex) o.example=ex;
+  const exz=PICK(w,['exampleZh','example_zh','exampleMeaning','example_meaning','sentenceZh']); if(exz) o.exampleZh=exz;
+  return o;
+}
+function parseImport(text,fallbackName){
+  let t=String(text||'').trim();
+  if(!t) return {error:'請先貼上 JSON 或選擇檔案。'};
+  t=t.replace(/^```[a-zA-Z]*\s*/,'').replace(/\s*```$/,'').trim();
+  let raw;
+  try{ raw=JSON.parse(t); }catch(e){
+    const a=t.indexOf('{'), b=t.lastIndexOf('}'), c=t.indexOf('['), d=t.lastIndexOf(']');
+    try{
+      if(a>=0&&b>a&&(c<0||a<c)) raw=JSON.parse(t.slice(a,b+1));
+      else if(c>=0&&d>c) raw=JSON.parse(t.slice(c,d+1));
+      else throw e;
+    }catch(e2){ return {error:'這不是有效的 JSON。請確認 AI 只輸出 JSON，沒有多餘的說明文字。（'+e.message+'）'}; }
+  }
+  let list;
+  if(Array.isArray(raw)) list=(raw.length&&raw[0]&&!Array.isArray(raw[0])&&typeof raw[0]==='object'&&Array.isArray(raw[0].words))?raw:[{name:fallbackName,words:raw}];
+  else if(raw&&Array.isArray(raw.units)) list=raw.units;
+  else if(raw&&Array.isArray(raw.words)) list=[raw];
+  else return {error:'找不到 words 欄位。格式應為 {"name":"單元名稱","words":[{"word":"…","meaning":"…"}]}。'};
+  const units=[]; let skipped=0;
+  list.forEach((src,i)=>{
+    const words=[]; (src.words||[]).forEach(w=>{ const n=normWord(w); if(n) words.push(n); else skipped++; });
+    if(!words.length) return;
+    units.push({id:'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+i,name:String(src.name||src.title||fallbackName||'未命名單元').trim().slice(0,60),created:Date.now()-i,words,status:{}});
+  });
+  if(!units.length) return {error:'找不到可用的單字。每筆單字至少需要 word（英文）和 meaning（中文）。'};
+  const big=units.find(u=>new TextEncoder().encode(JSON.stringify(u)).length>240000);
+  if(big) return {error:'「'+big.name+'」太大了，請拆成多個單元（建議每個單元 500 字以內）。'};
+  return {units,skipped};
+}
+async function addUnits(units){
+  state.units=units.concat(state.units);
+  if(!dbc) lsSave();
+  await Promise.all(units.map(u=>saveUnit(u,true)));
+}
+const SAMPLE={name:'範例：烹飪單字',words:[
+ {word:'pour',meaning:'倒；傾瀉',pos:'v.',example:'She poured water into the glass.',exampleZh:'她把水倒進杯子裡。'},
+ {word:'stir',meaning:'攪拌',pos:'v.',example:'Stir the soup slowly.',exampleZh:'慢慢攪拌湯。'},
+ {word:'slice',meaning:'切片；薄片',pos:'v./n.',example:'Slice the bread thinly.',exampleZh:'把麵包切成薄片。'},
+ {word:'chop',meaning:'剁；切碎',pos:'v.',example:'Chop the onions finely.',exampleZh:'把洋蔥切碎。'},
+ {word:'boil',meaning:'煮沸',pos:'v.',example:'Boil the eggs for ten minutes.',exampleZh:'把蛋煮十分鐘。'},
+ {word:'simmer',meaning:'用小火慢燉',pos:'v.'},
+ {word:'bake',meaning:'烘焙；烤',pos:'v.',example:'We bake cookies every weekend.',exampleZh:'我們每個週末都烤餅乾。'},
+ {word:'mix',meaning:'混合；攪拌',pos:'v.'},
+ {word:'recipe',meaning:'食譜',pos:'n.',example:'This recipe is easy to follow.',exampleZh:'這份食譜很容易照著做。'},
+ {word:'ingredient',meaning:'食材；原料',pos:'n.'},
+ {word:'flavor',meaning:'味道；風味',pos:'n.'},
+ {word:'spice',meaning:'香料',pos:'n.'}
+]};
+const AI_PROMPT=`請把我提供的課本（或文件）內容整理成單字表，只輸出一段 JSON，不要加任何說明文字，也不要加 Markdown 程式碼框。
+
+格式如下：
+{
+  "name": "單元名稱",
+  "words": [
+    {"word": "pour", "meaning": "倒；傾瀉", "pos": "v.", "phonetic": "/pɔr/", "example": "She poured water into the glass.", "exampleZh": "她把水倒進杯子裡。"},
+    {"word": "recipe", "meaning": "食譜"}
+  ]
+}
+
+規則：
+1. word 是英文單字或片語，meaning 是繁體中文意思；兩個欄位一定要有。
+2. 一個單字有多個意思時，用「；」分隔寫在同一個 meaning 裡。
+3. pos（詞性）、phonetic（音標）、example（例句）、exampleZh（例句翻譯）只有原文有提供時才填，沒有就整個欄位省略，不要自己編。
+4. 依照原文出現的順序排列，不要漏字、不要重複。
+5. 內容很多時請分成多個單元，每個單元 500 字以內。`;
+
+/* ---------- navigation ---------- */
+const app=()=>document.getElementById('app');
+function clear(){ const a=app(); a.textContent=''; window.scrollTo(0,0); return a; }
+function go(view,id){ state.view=view; if(id!==undefined) state.unitId=id; render(); }
+function render(){
+  if(S && state.view!=='study' && state.view!=='summary') S=null;
+  ({loading:renderLoading,home:renderHome,import:renderImport,unit:renderUnit,study:renderStudy,summary:renderSummary}[state.view]||renderHome)();
+}
+function storageLabel(){
+  return {cloud:'進度儲存在你的帳號，換裝置也能繼續。',local:'進度只存在這個瀏覽器。清除網站資料後會消失。',memory:'目前無法儲存，關閉頁面後進度會消失。',loading:''}[state.storage]||'';
+}
+function stripe(u){
+  const n=u.words.length, el=h('div',{class:'stripe'+(n>200?' dense':''),role:'img','aria-label':'單字狀態分布'});
+  for(let i=0;i<n;i++) el.append(h('i',{class:'s-'+(u.status[i]||'n')}));
+  return el;
+}
+function legend(c){
+  return h('div',{class:'legend'},
+    h('span',{},h('span',{class:'dot u'}),'待複習 ',h('b',{text:c.u})),
+    h('span',{},h('span',{class:'dot k'}),'已會 ',h('b',{text:c.k})),
+    h('span',{},h('span',{class:'dot'}),'未學 ',h('b',{text:c.n})));
+}
+
+/* ---------- views ---------- */
+function renderLoading(){ clear().append(h('div',{class:'page'},h('p',{class:'sub',text:'載入中…'}))); }
+
+function renderHome(){
+  const root=clear();
+  const page=h('div',{class:'page'});
+  page.append(h('header',{class:'head'},
+    h('div',{},h('h1',{text:'單字卡複習'}),h('p',{class:'sub',text:storageLabel()})),
+    h('button',{class:'btn primary',onclick:()=>go('import')},ic('plus'),'匯入單元')));
+  if(!state.units.length){
+    page.append(h('section',{class:'empty'},
+      h('h2',{text:'還沒有單元'}),
+      h('p',{text:'把課本或文件交給 AI，請它整理成指定格式的 JSON，再貼進來就會變成一個單元。'}),
+      h('div',{class:'row-actions'},
+        h('button',{class:'btn primary',onclick:()=>go('import')},'匯入第一個單元'),
+        h('button',{class:'btn',onclick:async()=>{ const r=parseImport(JSON.stringify(SAMPLE)); await addUnits(r.units); go('unit',r.units[0].id); }},'載入範例單元'))));
+  } else {
+    const list=h('div',{class:'units'});
+    state.units.forEach(u=>{
+      const c=counts(u);
+      list.append(h('button',{class:'unit',onclick:()=>go('unit',u.id)},
+        h('div',{class:'top'},h('span',{class:'name',text:u.name}),h('span',{class:'n',text:c.total+' 字'})),
+        stripe(u),legend(c)));
+    });
+    page.append(list);
+  }
+  root.append(page);
+}
+
+function renderImport(){
+  const root=clear();
+  const ta=h('textarea',{id:'import-text','aria-label':'單字 JSON',placeholder:'{\n  "name": "Lesson 3",\n  "words": [\n    {"word": "pour", "meaning": "倒；傾瀉"}\n  ]\n}',spellcheck:'false'});
+  const err=h('p',{class:'err',role:'alert',hidden:true});
+  const showErr=m=>{ err.textContent=m; err.hidden=!m; };
+  async function doImport(text){
+    const r=parseImport(text,state.fallbackName);
+    if(r.error) return showErr(r.error);
+    showErr('');
+    await addUnits(r.units);
+    const total=r.units.reduce((s,u)=>s+u.words.length,0);
+    toast('已匯入 '+r.units.length+' 個單元、'+total+' 字'+(r.skipped?'（略過 '+r.skipped+' 筆格式不完整的資料）':''));
+    state.fallbackName='';
+    if(r.units.length===1) go('unit',r.units[0].id); else go('home');
+  }
+  const file=h('input',{type:'file',id:'import-file',accept:'.json,.txt,application/json,text/plain','aria-label':'選擇 JSON 檔案',onchange:async e=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    state.fallbackName=f.name.replace(/\.[^.]+$/,'');
+    try{ ta.value=await f.text(); await doImport(ta.value); }catch(x){ showErr('讀取檔案失敗，請改用貼上的方式。'); }
+  }});
+  const promptPre=h('pre',{text:AI_PROMPT,id:'ai-prompt'});
+  const copyBtn=h('button',{class:'btn',onclick:async()=>{
+    try{ await navigator.clipboard.writeText(AI_PROMPT); toast('已複製指令'); }
+    catch(e){ const r=document.createRange(); r.selectNodeContents(promptPre); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('請手動複製已選取的文字'); }
+  }},ic('copy'),'複製指令');
+  root.append(h('div',{class:'page'},
+    h('div',{class:'topnav'},h('button',{class:'iconbtn','aria-label':'返回',onclick:()=>go('home')},ic('back')),h('h1',{text:'匯入單元'})),
+    h('section',{},h('h2',{text:'貼上 AI 產生的 JSON'}),ta),
+    err,
+    h('div',{class:'row-actions'},
+      h('button',{class:'btn primary',onclick:()=>doImport(ta.value)},'匯入'),
+      h('label',{class:'btn filebtn'},'選擇 JSON 檔案',file)),
+    h('section',{},h('h2',{text:'步驟 1：把這段指令連同課本內容交給 AI'}),
+      h('div',{class:'codebox'},promptPre,copyBtn)),
+    h('details',{},h('summary',{text:'可接受的欄位'}),
+      h('p',{class:'sub',text:'必填：word（英文）、meaning（中文）。選填：pos 詞性、phonetic 音標、example 例句、exampleZh 例句翻譯。也可以一次匯入多個單元：{"units":[{…},{…}]}。'})),
+    h('button',{class:'btn',onclick:async()=>{ const r=parseImport(JSON.stringify(SAMPLE)); await addUnits(r.units); go('unit',r.units[0].id); }},'先試試範例單元')));
+}
+
+function renderUnit(){
+  const u=unit(); if(!u){ state.view='home'; return renderHome(); }
+  const root=clear(), c=counts(u);
+  const listHost=h('div',{class:'words'});
+  const tabsHost=h('div',{class:'tabs',role:'group','aria-label':'篩選單字'});
+  const FILTERS=[['all','全部',c.total],['u','待複習',c.u],['k','已會',c.k],['n','未學',c.n]];
+  function fill(){
+    tabsHost.textContent='';
+    FILTERS.forEach(([k,l,n])=>tabsHost.append(h('button',{'aria-pressed':String(state.filter===k),onclick:()=>{ state.filter=k; fill(); }},l+' '+n)));
+    listHost.textContent='';
+    let shown=0;
+    u.words.forEach((w,i)=>{
+      const s=u.status[i]||'n'; if(state.filter!=='all'&&state.filter!==s) return; shown++;
+      const sub=[w.pos,w.phonetic].filter(Boolean).join('  ');
+      listHost.append(h('div',{class:'wrow'},
+        h('div',{class:'w'},w.word,sub?h('small',{text:sub}):null),
+        h('div',{class:'m',text:w.meaning}),
+        h('span',{class:'chip '+(s==='n'?'':s),text:s==='u'?'待複習':s==='k'?'已會':'未學'})));
+    });
+    if(!shown) listHost.append(h('div',{class:'none',text:'這個分類沒有單字。'}));
+  }
+  const frontSeg=h('div',{class:'seg',role:'group','aria-label':'字卡正面'});
+  const frontBtns=[['en','英文'],['zh','中文']].map(([k,l])=>h('button',{'aria-pressed':String(state.front===k),onclick:()=>{ state.front=k; savePrefs(); frontBtns.forEach((b,j)=>b.setAttribute('aria-pressed',String(['en','zh'][j]===k))); }},l));
+  frontSeg.append(...frontBtns);
+  const resetBtn=h('button',{class:'btn danger'},'重置進度');
+  armConfirm(resetBtn,'再按一次確認重置',()=>{ u.status={}; saveUnit(u,true); toast('已重置進度'); renderUnit(); });
+  const delBtn=h('button',{class:'btn danger'},'刪除單元');
+  armConfirm(delBtn,'再按一次確認刪除',()=>{ removeUnit(u.id); toast('已刪除「'+u.name+'」'); go('home'); });
+  root.append(h('div',{class:'page'},
+    h('div',{class:'topnav'},h('button',{class:'iconbtn','aria-label':'返回單元列表',onclick:()=>go('home')},ic('back')),h('h1',{text:u.name})),
+    stripe(u),
+    h('div',{class:'stats'},
+      h('div',{class:'stat u'},h('span',{class:'v',text:c.u}),h('span',{class:'l',text:'待複習'})),
+      h('div',{class:'stat k'},h('span',{class:'v',text:c.k}),h('span',{class:'l',text:'已會'})),
+      h('div',{class:'stat'},h('span',{class:'v',text:c.n}),h('span',{class:'l',text:'未學'}))),
+    h('div',{class:'row-actions'},
+      h('button',{class:'btn primary',onclick:()=>startStudy('all')},ic('play'),'開始複習 · 全部 '+c.total),
+      h('button',{class:'btn',disabled:c.u===0,onclick:()=>startStudy('unknown')},'複習待複習 · '+c.u)),
+    h('div',{class:'opt'},h('span',{text:'字卡正面顯示'}),frontSeg),
+    h('section',{},tabsHost,h('div',{style:'height:10px'}),listHost),
+    h('div',{class:'row-actions'},resetBtn,delBtn)));
+  fill();
+}
+
+/* ---------- study session ---------- */
+let S=null;
+function startStudy(mode,idsOverride){
+  const u=unit(); if(!u) return;
+  let ids=idsOverride||u.words.map((_,i)=>i).filter(i=>mode==='all'||u.status[i]==='u');
+  if(!ids.length){ toast('沒有可複習的單字'); return; }
+  S={queue:ids.slice(),i:0,count:{k:0,u:0},answers:{},history:[],track:S?S.track:true,flipped:false,shuffled:false,busy:false};
+  go('study');
+}
+function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function speak(text){
+  try{ if(!('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang='en-US'; u.rate=.9; speechSynthesis.speak(u); }catch(e){}
+}
+function answer(res){
+  const u=unit(), id=S.queue[S.i];
+  const e={id,i:S.i,res,prevAns:S.answers[id],tracked:S.track,prevStatus:u.status[id]};
+  if(e.prevAns) S.count[e.prevAns]--;
+  S.history.push(e); S.answers[id]=res; S.count[res]++;
+  if(S.track){ u.status[id]=res; saveUnit(u); }
+  S.i++; S.flipped=false;
+}
+function undo(){
+  if(!S||S.busy) return; const e=S.history.pop(); if(!e) return;
+  const u=unit();
+  S.count[e.res]--; if(e.prevAns){ S.answers[e.id]=e.prevAns; S.count[e.prevAns]++; } else delete S.answers[e.id];
+  if(e.tracked){ if(e.prevStatus) u.status[e.id]=e.prevStatus; else delete u.status[e.id]; saveUnit(u); }
+  S.i=e.i; S.flipped=false;
+  if(state.view==='summary'){ state.view='study'; renderStudy(); } else { sync(true); }
+}
+
+let UI={};
+function renderStudy(){
+  const u=unit(); if(!u||!S){ return go('unit'); }
+  const root=clear();
+  const scrub=h('input',{type:'range',class:'scrub',min:'0',max:String(Math.max(0,S.queue.length-1)),value:'0','aria-label':'目前進度',oninput:e=>{ if(S.busy) return; S.i=+e.target.value; S.flipped=false; sync(true); }});
+  const posEl=h('span',{class:'pos'});
+  const badEl=h('span',{class:'pill bad','aria-label':'不會'},ic('x'),h('span',{text:'0'}));
+  const goodEl=h('span',{class:'pill good','aria-label':'會'},ic('check'),h('span',{text:'0'}));
+  const front=h('div',{class:'face front'}), back=h('div',{class:'face back'});
+  const tintGood=h('div',{class:'tint good',text:'✓ 會'}), tintBad=h('div',{class:'tint bad',text:'✕ 不會'});
+  const shuf=h('button',{class:'iconbtn','aria-label':'隨機排序剩下的字卡','aria-pressed':'false',onpointerdown:e=>e.stopPropagation(),onclick:e=>{
+    e.stopPropagation(); S.shuffled=!S.shuffled;
+    const done=S.queue.slice(0,S.i+1), rest=S.queue.slice(S.i+1);
+    S.queue=done.concat(S.shuffled?shuffleArr(rest):rest.sort((a,b)=>a-b));
+    shuf.setAttribute('aria-pressed',String(S.shuffled)); toast(S.shuffled?'已隨機排序剩下的字卡':'已恢復原本順序');
+  }},ic('shuffle'));
+  const spk=h('button',{class:'iconbtn','aria-label':'播放發音',onpointerdown:e=>e.stopPropagation(),onclick:e=>{ e.stopPropagation(); speak(u.words[S.queue[S.i]].word); }},ic('speaker'));
+  const tools=h('div',{class:'tools'},shuf,spk);
+  const card=h('div',{class:'card',role:'button',tabindex:'0','aria-label':'字卡，點一下翻面，向左滑表示會，向右滑表示不會'},
+    h('div',{class:'flip'},front,back),tintGood,tintBad,tools);
+  const undoBtn=h('button',{class:'undo',onclick:undo},ic('undo'),'復原');
+  const trackBtn=h('button',{class:'track',role:'switch','aria-checked':String(S.track),onclick:()=>{ S.track=!S.track; trackBtn.setAttribute('aria-checked',String(S.track)); toast(S.track?'會記錄學習進度':'不記錄，只是練習'); }},h('span',{text:'追蹤學習進度'}),h('span',{class:'sw'}));
+  const noBtn=h('button',{class:'round bad','aria-label':'不會，列入待複習',onclick:()=>commit('u')},ic('x'));
+  const yesBtn=h('button',{class:'round good','aria-label':'會了',onclick:()=>commit('k')},ic('check'));
+  UI={card,front,back,scrub,posEl,badEl,goodEl,undoBtn,tintGood,tintBad,shuf};
+  root.append(h('div',{class:'study'},
+    h('div',{class:'topbar'},h('button',{class:'iconbtn','aria-label':'結束複習',onclick:()=>{ flushAll(); go('unit'); }},ic('back')),scrub,posEl,badEl,goodEl),
+    h('div',{class:'stage'},card),
+    h('div',{class:'bar'},undoBtn,h('div',{class:'answer'},noBtn,yesBtn),trackBtn)));
+  bindCard(card);
+  sync(false);
+}
+function fillFaces(){
+  const u=unit(), w=u.words[S.queue[S.i]];
+  const en=h('p',{class:'big-en',text:w.word}), zh=h('p',{class:'big-zh',text:w.meaning});
+  const meta=h('div',{class:'meta'},w.pos?h('span',{text:w.pos}):null,w.phonetic?h('span',{text:w.phonetic}):null);
+  const ex=w.example?h('p',{class:'ex'},w.example,w.exampleZh?h('small',{text:w.exampleZh}):null):null;
+  UI.front.textContent=''; UI.back.textContent='';
+  if(state.front==='en'){
+    UI.front.append(en);
+    UI.back.append(zh,meta,ex,h('p',{class:'hint',text:w.word}));
+  } else {
+    UI.front.append(zh);
+    UI.back.append(en,meta,ex);
+  }
+  UI.card.classList.toggle('flipped',S.flipped);
+}
+function sync(enter){
+  if(!UI.card) return;
+  const total=S.queue.length;
+  fillFaces();
+  UI.scrub.max=String(Math.max(0,total-1)); UI.scrub.value=String(S.i);
+  UI.scrub.style.setProperty('--p',(total>1?S.i/(total-1)*100:0)+'%');
+  UI.posEl.textContent=(S.i+1)+'/'+total;
+  UI.badEl.lastChild.textContent=S.count.u; UI.goodEl.lastChild.textContent=S.count.k;
+  UI.undoBtn.disabled=S.history.length===0;
+  if(enter && !reduceMotion()){ UI.card.classList.remove('enter'); void UI.card.offsetWidth; UI.card.classList.add('enter'); }
+}
+function resetCardStyle(){
+  const c=UI.card; c.style.transition='none'; c.style.transform=''; c.style.opacity=''; c.style.removeProperty('--x');
+  UI.tintGood.style.opacity='0'; UI.tintBad.style.opacity='0';
+}
+function commit(res){
+  if(!S||S.busy) return; S.busy=true;
+  const dir=res==='k'?-1:1, dist=Math.max(window.innerWidth,600)*dir, c=UI.card;
+  const ms=reduceMotion()?0:220;
+  (res==='k'?UI.tintGood:UI.tintBad).style.opacity='1';
+  c.style.transition=ms?`transform ${ms}ms ease-in, opacity ${ms}ms ease-in`:'none';
+  c.style.transform=`translateX(${dist}px) rotate(${dir*14}deg)`; c.style.opacity='0';
+  setTimeout(()=>{
+    answer(res); S.busy=false;
+    if(S.i>=S.queue.length){ flushAll(); state.view='summary'; renderSummary(); return; }
+    resetCardStyle(); sync(true);
+  },ms);
+}
+function bindCard(card){
+  let d=null;
+  card.addEventListener('pointerdown',e=>{
+    if(S.busy||(e.pointerType==='mouse'&&e.button!==0)) return;
+    d={x:e.clientX,t:performance.now(),dx:0,id:e.pointerId};
+    try{card.setPointerCapture(e.pointerId);}catch(x){}
+    card.style.transition='none';
+  });
+  card.addEventListener('pointermove',e=>{
+    if(!d||e.pointerId!==d.id) return;
+    d.dx=e.clientX-d.x;
+    card.style.transform=`translateX(${d.dx}px) rotate(${d.dx/22}deg)`;
+    const th=Math.min(120,card.offsetWidth*.25), o=Math.min(1,Math.abs(d.dx)/th);
+    UI.tintGood.style.opacity=d.dx<0?o:0; UI.tintBad.style.opacity=d.dx>0?o:0;
+  });
+  const end=e=>{
+    if(!d||e.pointerId!==d.id) return;
+    const dx=d.dx, dt=Math.max(1,performance.now()-d.t), v=dx/dt; d=null;
+    const th=Math.min(120,card.offsetWidth*.25);
+    if(Math.abs(dx)>th||(Math.abs(dx)>40&&Math.abs(v)>.5)){ commit(dx<0?'k':'u'); return; }
+    if(Math.abs(dx)<6&&dt<400){ resetCardStyle(); S.flipped=!S.flipped; card.classList.toggle('flipped',S.flipped); return; }
+    card.style.transition=reduceMotion()?'none':'transform .2s ease'; card.style.transform=''; UI.tintGood.style.opacity='0'; UI.tintBad.style.opacity='0';
+  };
+  card.addEventListener('pointerup',end); card.addEventListener('pointercancel',end);
+}
+document.addEventListener('keydown',e=>{
+  if(state.view!=='study'||!S||e.ctrlKey||e.metaKey||e.altKey) return;
+  const t=e.target; if(t&&(t.tagName==='INPUT'&&t.type!=='range'||t.tagName==='TEXTAREA')) return;
+  if(t&&t.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter')) return;
+  if(e.key==='ArrowLeft'){ e.preventDefault(); commit('k'); }
+  else if(e.key==='ArrowRight'){ e.preventDefault(); commit('u'); }
+  else if(e.key===' '||e.key==='Enter'){ e.preventDefault(); S.flipped=!S.flipped; UI.card.classList.toggle('flipped',S.flipped); }
+  else if(e.key==='z'||e.key==='Z'||e.key==='Backspace'){ e.preventDefault(); undo(); }
+});
+
+function renderSummary(){
+  const u=unit(); const root=clear();
+  const unknownIds=S.queue.filter(id=>S.answers[id]==='u');
+  const c=counts(u);
+  root.append(h('div',{class:'summary'},
+    h('div',{},h('h1',{text:'這一輪完成了'}),h('p',{class:'sub',text:u.name+(S.track?'':'（未記錄進度）')})),
+    h('div',{class:'nums'},
+      h('div',{class:'stat k'},h('span',{class:'v',text:S.count.k}),h('span',{class:'l',text:'會'})),
+      h('div',{class:'stat u'},h('span',{class:'v',text:S.count.u}),h('span',{class:'l',text:'不會'}))),
+    stripe(u),legend(c),
+    unknownIds.length?h('button',{class:'btn primary block',onclick:()=>startStudy('unknown',unknownIds.slice().sort((a,b)=>a-b))},'再複習不會的 '+unknownIds.length+' 字'):null,
+    h('button',{class:'btn block',onclick:()=>startStudy('all')},'重新開始（全部）'),
+    h('button',{class:'btn block',onclick:()=>go('unit')},'回到單元'),
+    h('button',{class:'btn block',onclick:undo},ic('undo'),'復原最後一張')));
+}
+
+/* ---------- boot ---------- */
+render();
+initStorage().then(()=>{ state.view='home'; render(); });
+})();
+</script>
+</body>
+</html>
