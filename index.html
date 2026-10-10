@@ -63,6 +63,9 @@ button{cursor:pointer}
 h1{font-family:var(--font-serif);font-size:28px;line-height:1.25;font-weight:700;margin:0;text-wrap:balance}
 h2{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.06em;margin:0 0 8px}
 .sub{margin:4px 0 0;color:var(--muted);font-size:13px}
+.head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.acct{display:flex;align-items:center;gap:8px;min-width:0}
+.acct .who{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft);font-size:13px}
 .topnav{display:flex;align-items:center;gap:8px}
 .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--fg)}
 .iconbtn:hover{background:var(--surface-2)}
@@ -216,6 +219,47 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
 <div id="app"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<script>window.fbReady=new Promise(function(r){window.__fbResolve=r;});</script>
+<script type="module">
+(async()=>{
+  if(window.claude){ window.__fbResolve(null); return; }
+  try{
+    const V='10.14.1', B='https://www.gstatic.com/firebasejs/'+V+'/';
+    const [A,Au,Fs]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-auth.js'),import(B+'firebase-firestore.js')]);
+    const app=A.initializeApp({
+      apiKey:"AIzaSyCVhqPiSu0HM_LNFbSrlhXPyXS3FIvry0I",
+      authDomain:"vocab-cards-37feb.firebaseapp.com",
+      projectId:"vocab-cards-37feb",
+      storageBucket:"vocab-cards-37feb.firebasestorage.app",
+      messagingSenderId:"219326445740",
+      appId:"1:219326445740:web:e0821ef818963359cac709"
+    });
+    let db;
+    try{ db=Fs.initializeFirestore(app,{localCache:Fs.persistentLocalCache({tabManager:Fs.persistentMultipleTabManager()})}); }
+    catch(e){ db=Fs.getFirestore(app); }
+    const auth=Au.getAuth(app), provider=new Au.GoogleAuthProvider();
+    provider.setCustomParameters({prompt:'select_account'});
+    let cur=null;
+    const authReady=new Promise(res=>{ Au.onAuthStateChanged(auth,u=>{ cur=u; res(); }); });
+    try{ await Au.getRedirectResult(auth); }catch(e){}
+    window.__fbResolve({
+      authReady,
+      user:()=>cur?{uid:cur.uid,name:cur.displayName||'',email:cur.email||''}:null,
+      async signIn(){
+        try{ const r=await Au.signInWithPopup(auth,provider); cur=r.user; return 'popup'; }
+        catch(e){
+          if(e&&(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment')){ await Au.signInWithRedirect(auth,provider); return 'redirect'; }
+          throw e;
+        }
+      },
+      async signOut(){ await Au.signOut(auth); cur=null; },
+      async load(){ const snap=await Fs.getDocs(Fs.collection(db,'users',cur.uid,'units')); return snap.docs.map(d=>Object.assign({id:d.id},d.data())); },
+      save:(u)=>Fs.setDoc(Fs.doc(db,'users',cur.uid,'units',u.id),u),
+      remove:(id)=>Fs.deleteDoc(Fs.doc(db,'users',cur.uid,'units',id))
+    });
+  }catch(e){ window.__fbResolve(null); }
+})();
+</script>
 <script>
 (function(){
 'use strict';
@@ -269,6 +313,28 @@ function lsLoad(){ try{ const v=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); 
 function lsSave(){ try{ localStorage.setItem(LS_KEY,JSON.stringify(state.units)); if(state.storage==='memory') state.storage='local'; }catch(e){ state.storage='memory'; } }
 function loadPrefs(){ try{ const p=JSON.parse(localStorage.getItem(LS_PREF)||'{}'); if(p.front==='zh'||p.front==='en') state.front=p.front; }catch(e){} }
 function savePrefs(){ try{ localStorage.setItem(LS_PREF,JSON.stringify({front:state.front})); }catch(e){} }
+let FB=null;
+const isFB=()=>!!(FB&&state.storage==='firebase'&&FB.user());
+const withTimeout=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);
+function normUnits(){
+  state.units.forEach(u=>{ u.status=u.status||{}; u.words=u.words||[]; });
+  state.units.sort((a,b)=>(b.created||0)-(a.created||0));
+}
+async function loadFromCloud(){
+  const cloud=await withTimeout(FB.load(),12000);
+  const ids=new Set(cloud.map(u=>u.id));
+  const local=lsLoad().filter(u=>u&&u.id&&Array.isArray(u.words)&&!ids.has(u.id));
+  state.units=cloud; state.storage='firebase';
+  if(local.length){
+    state.units=local.concat(cloud);
+    try{
+      await withTimeout(Promise.all(local.map(u=>FB.save(JSON.parse(JSON.stringify(u))))),8000);
+      try{ localStorage.removeItem(LS_KEY); }catch(e){}
+      toast('已把這台裝置的 '+local.length+' 個單元同步到雲端');
+    }catch(e){ /* keep the local copy; it uploads again next time */ }
+  } else { try{ localStorage.removeItem(LS_KEY); }catch(e){} }
+  normUnits();
+}
 async function initStorage(){
   loadPrefs();
   try{
@@ -285,12 +351,43 @@ async function initStorage(){
       state.storage='cloud';
     }catch(e){ dbc=null; }
   }
-  if(!dbc){
+  if(!dbc && !window.claude && window.fbReady){
+    try{ FB=await withTimeout(window.fbReady,10000); }catch(e){ FB=null; }
+    if(FB){
+      try{ await withTimeout(FB.authReady,10000); if(FB.user()) await loadFromCloud(); }
+      catch(e){ state.storage='loading'; toast('雲端載入失敗，先使用這台裝置的資料'); }
+    }
+  }
+  if(!dbc && state.storage!=='firebase'){
     state.units=lsLoad(); state.storage='local';
     try{ localStorage.setItem('vocab-cards-probe','1'); localStorage.removeItem('vocab-cards-probe'); }catch(e){ state.storage='memory'; }
   }
-  state.units.forEach(u=>{ u.status=u.status||{}; u.words=u.words||[]; });
-  state.units.sort((a,b)=>(b.created||0)-(a.created||0));
+  normUnits();
+}
+async function doSignIn(btn){
+  if(btn) btn.disabled=true;
+  try{
+    const r=await FB.signIn(); if(r==='redirect') return;
+    await loadFromCloud();
+    toast('已登入 Google，單元和進度會同步到你的帳號');
+  }catch(e){
+    const c=(e&&e.code)||'';
+    if(c!=='auth/popup-closed-by-user'&&c!=='auth/cancelled-popup-request') toast('登入失敗：'+(c||e.message));
+  }
+  go('home');
+}
+async function doSignOut(){
+  flushAll();
+  try{ await FB.signOut(); }catch(e){}
+  state.units=lsLoad(); state.storage='local'; normUnits();
+  toast('已登出，你的單元仍保存在 Google 帳號中');
+  go('home');
+}
+function accountBox(){
+  if(!FB) return null;
+  const u=FB.user();
+  if(!u){ const b=h('button',{class:'btn',onclick:()=>doSignIn(b)},'用 Google 登入'); return b; }
+  return h('div',{class:'acct'},h('span',{class:'who',text:u.name||u.email}),h('button',{class:'btn',onclick:doSignOut},'登出'));
 }
 const pending=new Map(), timers=new Map(), chains=new Map();
 function saveUnit(u,now){
@@ -302,6 +399,11 @@ function flush(id){
   clearTimeout(timers.get(id));
   const u=pending.get(id); if(!u) return Promise.resolve();
   pending.delete(id);
+  if(!dbc&&isFB()){
+    const body=JSON.parse(JSON.stringify(u));
+    const p=(chains.get(id)||Promise.resolve()).then(()=>FB.save(body)).catch(()=>{ toast('雲端儲存失敗，請檢查網路連線'); });
+    chains.set(id,p); return Promise.resolve();
+  }
   if(!dbc){ lsSave(); return Promise.resolve(); }
   const body=JSON.parse(JSON.stringify(u));
   const p=(chains.get(id)||Promise.resolve())
@@ -313,9 +415,13 @@ function flushAll(){ for(const id of Array.from(pending.keys())) flush(id); }
 function removeUnit(id){
   state.units=state.units.filter(u=>u.id!==id); pending.delete(id);
   if(dbc){ const p=(chains.get(id)||Promise.resolve()).then(()=>dbc&&dbc.doc(id).delete()).catch(()=>{ toast('刪除同步失敗，重新整理後可能還會出現'); }); chains.set(id,p); }
+  else if(isFB()){ const p=(chains.get(id)||Promise.resolve()).then(()=>FB.remove(id)).catch(()=>{ toast('刪除同步失敗，重新整理後可能還會出現'); }); chains.set(id,p); }
   else lsSave();
 }
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushAll(); });
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden') flushAll();
+  else if(isFB()&&state.view==='home'&&!pending.size) loadFromCloud().then(()=>{ if(state.view==='home') render(); }).catch(()=>{});
+});
 window.addEventListener('pagehide',flushAll);
 
 /* ---------- import ---------- */
@@ -364,7 +470,7 @@ function parseImport(text,fallbackName){
 }
 async function addUnits(units){
   state.units=units.concat(state.units);
-  if(!dbc) lsSave();
+  if(!dbc&&!isFB()) lsSave();
   await Promise.all(units.map(u=>saveUnit(u,true)));
 }
 const SAMPLE={name:'範例：烹飪單字',words:[
@@ -408,7 +514,8 @@ function render(){
   ({loading:renderLoading,home:renderHome,import:renderImport,unit:renderUnit,study:renderStudy,summary:renderSummary}[state.view]||renderHome)();
 }
 function storageLabel(){
-  return {cloud:'進度儲存在你的帳號，換裝置也能繼續。',local:'進度只存在這個瀏覽器。清除網站資料後會消失。',memory:'目前無法儲存，關閉頁面後進度會消失。',loading:''}[state.storage]||'';
+  if(state.storage==='local'&&FB&&!FB.user()) return '進度只存在這個瀏覽器。登入 Google 後可雲端同步，換裝置也能繼續。';
+  return {cloud:'進度儲存在你的帳號，換裝置也能繼續。',firebase:'進度儲存在你的 Google 帳號，換裝置也能繼續。',local:'進度只存在這個瀏覽器。清除網站資料後會消失。',memory:'目前無法儲存，關閉頁面後進度會消失。',loading:''}[state.storage]||'';
 }
 function stripe(u){
   const n=u.words.length, el=h('div',{class:'stripe'+(n>200?' dense':''),role:'img','aria-label':'單字狀態分布'});
@@ -430,7 +537,7 @@ function renderHome(){
   const page=h('div',{class:'page'});
   page.append(h('header',{class:'head'},
     h('div',{},h('h1',{text:'單字卡複習'}),h('p',{class:'sub',text:storageLabel()})),
-    h('button',{class:'btn primary',onclick:()=>go('import')},ic('plus'),'匯入單元')));
+    h('div',{class:'head-actions'},accountBox(),h('button',{class:'btn primary',onclick:()=>go('import')},ic('plus'),'匯入單元'))));
   if(!state.units.length){
     page.append(h('section',{class:'empty'},
       h('h2',{text:'還沒有單元'}),
