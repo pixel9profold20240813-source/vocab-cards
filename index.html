@@ -66,6 +66,19 @@ h2{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:.06em;margin
 .head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .acct{display:flex;align-items:center;gap:8px;min-width:0}
 .acct .who{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft);font-size:13px}
+.btn.sm{min-height:38px;padding:0 14px;font-size:14px}
+.field{width:100%;min-height:44px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.adminbox{background:var(--surface);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.adminbox h2{margin:0}
+.badge{font-size:12px;border:1px solid var(--ink);color:var(--ink);border-radius:4px;padding:0 8px;line-height:1.7;white-space:nowrap}
+.lib-item{display:flex;flex-direction:column;gap:8px;padding:16px;border-top:1px solid var(--line);min-width:0}
+.lib-item:first-child{border-top:0}
+.lib-item .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.lib-item .name{font-family:var(--font-serif);font-weight:700;font-size:17px;overflow-wrap:anywhere}
+.lib-item .n{font-family:var(--font-display);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.lib-item .sub{margin:0}
+.prev{color:var(--muted);font-family:var(--font-display);font-size:13px;overflow-wrap:anywhere}
+.lib-actions{display:flex;gap:8px;flex-wrap:wrap}
 .topnav{display:flex;align-items:center;gap:8px}
 .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--fg)}
 .iconbtn:hover{background:var(--surface-2)}
@@ -255,7 +268,10 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
       async signOut(){ await Au.signOut(auth); cur=null; },
       async load(){ const snap=await Fs.getDocs(Fs.collection(db,'users',cur.uid,'units')); return snap.docs.map(d=>Object.assign({id:d.id},d.data())); },
       save:(u)=>Fs.setDoc(Fs.doc(db,'users',cur.uid,'units',u.id),u),
-      remove:(id)=>Fs.deleteDoc(Fs.doc(db,'users',cur.uid,'units',id))
+      remove:(id)=>Fs.deleteDoc(Fs.doc(db,'users',cur.uid,'units',id)),
+      async libList(){ const snap=await Fs.getDocs(Fs.collection(db,'library')); return snap.docs.map(d=>Object.assign({id:d.id},d.data())); },
+      libSave:(l)=>Fs.setDoc(Fs.doc(db,'library',l.id),l),
+      libRemove:(id)=>Fs.deleteDoc(Fs.doc(db,'library',id))
     });
   }catch(e){ window.__fbResolve(null); }
 })();
@@ -382,6 +398,90 @@ async function doSignOut(){
   state.units=lsLoad(); state.storage='local'; normUnits();
   toast('已登出，你的單元仍保存在 Google 帳號中');
   go('home');
+}
+/* ---------- public library ---------- */
+const ADMIN_EMAIL='pixel9profold20240813@gmail.com';
+const isAdmin=()=>{ const u=FB&&FB.user(); return !!(u&&u.email&&u.email.toLowerCase()===ADMIN_EMAIL); };
+const LIB={items:null,err:''};
+function libErr(e){
+  const c=(e&&e.code)||'';
+  if(c.indexOf('permission-denied')>=0) return '沒有權限。請確認 Firestore 規則已更新為包含 library 的版本。';
+  return '操作失敗，請檢查網路後重試。（'+(c||(e&&e.message)||'unknown')+'）';
+}
+async function loadLibrary(){
+  LIB.err='';
+  try{ LIB.items=(await withTimeout(FB.libList(),12000)).filter(l=>l&&Array.isArray(l.words)).sort((a,b)=>(b.created||0)-(a.created||0)); }
+  catch(e){ LIB.items=[]; LIB.err=libErr(e); }
+}
+async function addFromLib(l){
+  const u={id:'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:l.name,created:Date.now(),words:l.words.map(w=>Object.assign({},w)),status:{},srcLib:l.id};
+  await addUnits([u]);
+  toast('已加入「'+l.name+'」到我的單元');
+}
+function renderLibrary(){
+  if(!FB){ state.view='home'; return renderHome(); }
+  const root=clear();
+  const listHost=h('div'), adminHost=h('div');
+  function paintList(){
+    listHost.textContent='';
+    if(LIB.err){ listHost.append(h('p',{class:'err',role:'alert',text:LIB.err}),h('button',{class:'btn',onclick:refresh},'重試')); return; }
+    if(!LIB.items){ listHost.append(h('p',{class:'sub',text:'載入中…'})); return; }
+    if(!LIB.items.length){ listHost.append(h('div',{class:'empty'},h('h2',{text:'單字庫還是空的'}),h('p',{text:isAdmin()?'用上方的表單新增第一個公開單元。':'管理員新增單元後，會出現在這裡。'}))); return; }
+    const box=h('div',{class:'units'});
+    LIB.items.forEach(l=>{
+      const added=state.units.some(u=>u.srcLib===l.id);
+      const addBtn=h('button',{class:'btn sm'+(added?'':' primary'),disabled:added,onclick:async()=>{ addBtn.disabled=true; await addFromLib(l); paintList(); }},added?'已加入':'加入我的單元');
+      const acts=h('div',{class:'lib-actions'},addBtn);
+      if(isAdmin()){
+        const del=h('button',{class:'btn sm danger'},'從單字庫刪除');
+        armConfirm(del,'再按一次確認刪除',async()=>{ try{ await withTimeout(FB.libRemove(l.id),12000); LIB.items=LIB.items.filter(x=>x.id!==l.id); toast('已從單字庫刪除'); paintList(); }catch(e){ toast(libErr(e)); } });
+        acts.append(del);
+      }
+      box.append(h('div',{class:'lib-item'},
+        h('div',{class:'top'},h('span',{class:'name',text:l.name}),h('span',{class:'n',text:l.words.length+' 字'})),
+        l.description?h('p',{class:'sub',text:l.description}):null,
+        h('div',{class:'prev',text:l.words.slice(0,8).map(w=>w.word).join(' · ')+(l.words.length>8?' …':'')}),
+        acts));
+    });
+    listHost.append(box);
+  }
+  async function refresh(){ LIB.items=null; LIB.err=''; paintList(); await loadLibrary(); if(state.view==='library') paintList(); }
+  if(isAdmin()){
+    const ta=h('textarea',{id:'lib-text','aria-label':'要新增到公開單字庫的 JSON',placeholder:'貼上單字 JSON（格式同匯入頁）',spellcheck:'false'});
+    ta.style.minHeight='140px';
+    const desc=h('input',{id:'lib-desc',class:'field',type:'text',maxlength:'120','aria-label':'單字庫說明',placeholder:'說明（選填，例如：國中會考核心 1200 字）'});
+    const err=h('p',{class:'err',role:'alert',hidden:true});
+    const showErr=m=>{ err.textContent=m; err.hidden=!m; };
+    let fallback='';
+    const file=h('input',{type:'file',id:'lib-file',accept:'.json,.txt,application/json,text/plain','aria-label':'選擇 JSON 檔案',onchange:async e=>{
+      const f=e.target.files&&e.target.files[0]; if(!f) return;
+      fallback=f.name.replace(/\.[^.]+$/,'');
+      try{ ta.value=await f.text(); showErr(''); }catch(x){ showErr('讀取檔案失敗，請改用貼上的方式。'); }
+    }});
+    const pub=h('button',{class:'btn primary',onclick:async()=>{
+      const r=parseImport(ta.value,fallback); if(r.error) return showErr(r.error);
+      showErr(''); pub.disabled=true;
+      try{
+        const d=desc.value.trim(), now=Date.now();
+        for(let i=0;i<r.units.length;i++){
+          const u=r.units[i];
+          await withTimeout(FB.libSave({id:'l'+(now+i).toString(36)+Math.random().toString(36).slice(2,5),name:u.name,description:d,words:u.words,count:u.words.length,created:now-i}),12000);
+        }
+        ta.value=''; desc.value=''; fallback='';
+        toast('已發布 '+r.units.length+' 個單元到公開單字庫');
+        await refresh();
+      }catch(e){ showErr(libErr(e)); }
+      pub.disabled=false;
+    }},'發布到公開單字庫');
+    adminHost.append(h('section',{class:'adminbox'},
+      h('h2',{text:'新增單字庫（管理員）'}),ta,desc,err,
+      h('div',{class:'row-actions'},pub,h('label',{class:'btn filebtn'},'選擇 JSON 檔案',file))));
+  }
+  root.append(h('div',{class:'page'},
+    h('div',{class:'topnav'},h('button',{class:'iconbtn','aria-label':'返回',onclick:()=>go('home')},ic('back')),h('h1',{text:'單字庫'}),isAdmin()?h('span',{class:'badge',text:'管理員'}):null),
+    h('p',{class:'sub',text:FB.user()?'選一個單元，加入後會複製到你的帳號，進度各自獨立。':'未登入時，加入的單元只會存在這個瀏覽器；登入 Google 後才會同步到帳號。'}),
+    adminHost,listHost));
+  refresh();
 }
 function accountBox(){
   if(!FB) return null;
@@ -511,7 +611,7 @@ function clear(){ const a=app(); a.textContent=''; window.scrollTo(0,0); return 
 function go(view,id){ state.view=view; if(id!==undefined) state.unitId=id; render(); }
 function render(){
   if(S && state.view!=='study' && state.view!=='summary') S=null;
-  ({loading:renderLoading,home:renderHome,import:renderImport,unit:renderUnit,study:renderStudy,summary:renderSummary}[state.view]||renderHome)();
+  ({loading:renderLoading,home:renderHome,import:renderImport,unit:renderUnit,study:renderStudy,summary:renderSummary,library:renderLibrary}[state.view]||renderHome)();
 }
 function storageLabel(){
   if(state.storage==='local'&&FB&&!FB.user()) return '進度只存在這個瀏覽器。登入 Google 後可雲端同步，換裝置也能繼續。';
@@ -537,13 +637,14 @@ function renderHome(){
   const page=h('div',{class:'page'});
   page.append(h('header',{class:'head'},
     h('div',{},h('h1',{text:'單字卡複習'}),h('p',{class:'sub',text:storageLabel()})),
-    h('div',{class:'head-actions'},accountBox(),h('button',{class:'btn primary',onclick:()=>go('import')},ic('plus'),'匯入單元'))));
+    h('div',{class:'head-actions'},accountBox(),FB?h('button',{class:'btn',onclick:()=>go('library')},'單字庫'):null,h('button',{class:'btn primary',onclick:()=>go('import')},ic('plus'),'匯入單元'))));
   if(!state.units.length){
     page.append(h('section',{class:'empty'},
       h('h2',{text:'還沒有單元'}),
       h('p',{text:'把課本或文件交給 AI，請它整理成指定格式的 JSON，再貼進來就會變成一個單元。'}),
       h('div',{class:'row-actions'},
         h('button',{class:'btn primary',onclick:()=>go('import')},'匯入第一個單元'),
+        FB?h('button',{class:'btn',onclick:()=>go('library')},'從單字庫選擇'):null,
         h('button',{class:'btn',onclick:async()=>{ const r=parseImport(JSON.stringify(SAMPLE)); await addUnits(r.units); go('unit',r.units[0].id); }},'載入範例單元'))));
   } else {
     const list=h('div',{class:'units'});
