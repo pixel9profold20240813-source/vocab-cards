@@ -41,9 +41,10 @@ img{max-width:100%}
   --new:#cfd3d7; --focus:#2f6fe0;
   color-scheme:light;
 }
+*,*::before,*::after{box-sizing:border-box}
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.5;padding-inline:16px;-webkit-tap-highlight-color:transparent}
-#app{min-height:100%}
+#app{height:100%}
 button,input,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
@@ -124,8 +125,8 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
 .none{padding:20px;text-align:center;color:var(--muted)}
 
 /* Study */
-.study{height:100%;max-width:1100px;margin-inline:auto;display:flex;flex-direction:column;gap:12px;padding-block:12px 16px}
-.topbar{display:flex;align-items:center;gap:12px}
+.study{height:100%;min-height:0;max-width:1100px;margin-inline:auto;display:flex;flex-direction:column;gap:12px;padding-block:12px 16px;overflow:hidden}
+.topbar{display:flex;align-items:center;gap:12px;position:relative;z-index:2}
 .scrub{flex:1;min-width:0;height:28px;margin:0;-webkit-appearance:none;appearance:none;background:transparent;--p:0%}
 .scrub::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--soft) var(--p),var(--line) var(--p))}
 .scrub::-moz-range-track{height:4px;border-radius:2px;background:var(--line)}
@@ -137,7 +138,7 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
 .pill .ic{width:16px;height:16px}
 .pill.bad{background:var(--bad);color:var(--bad-ink)}
 .pill.good{background:var(--good);color:var(--good-ink)}
-.stage{position:relative;flex:1;min-height:0}
+.stage{position:relative;z-index:1;isolation:isolate;flex:1 1 0;min-height:0}
 .card{position:absolute;inset:0;margin:auto;width:min(100%,720px);height:min(100%,560px);touch-action:pan-y;cursor:grab;user-select:none;-webkit-user-select:none;will-change:transform}
 .card:active{cursor:grabbing}
 .card.enter{animation:enter .18s ease-out}
@@ -158,7 +159,7 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
 .tools{position:absolute;right:20px;bottom:18px;display:flex;gap:4px;z-index:3}
 .tools .iconbtn{color:var(--soft)}
 .tools .iconbtn[aria-pressed="true"]{color:var(--fg);background:var(--surface-2)}
-.bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;position:relative;z-index:2;flex:none}
 .bar .undo{justify-self:start;display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;min-height:48px;padding:0 8px 0 4px;border-radius:12px;font-size:16px}
 .bar .undo:disabled{opacity:.35;cursor:default}
 .answer{display:flex;gap:10px}
@@ -166,11 +167,6 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
 .round.bad{color:var(--bad-solid)} .round.good{color:var(--good-solid)}
 .round:hover{background:var(--line)}
 .round .ic{width:28px;height:28px}
-.track{justify-self:end;display:inline-flex;align-items:center;gap:10px;border:0;background:transparent;min-height:48px;font-size:14px;text-align:right;min-width:0}
-.sw{width:46px;height:28px;border-radius:14px;background:var(--surface-2);position:relative;flex:none;transition:background .15s}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
-.track[aria-checked="true"] .sw{background:var(--fg)}
-.track[aria-checked="true"] .sw::after{transform:translateX(18px);background:var(--bg)}
 
 .summary{max-width:480px;margin-inline:auto;padding-block:48px;display:flex;flex-direction:column;gap:20px;align-items:stretch}
 .summary .nums{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -179,7 +175,6 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100% - 32px);text-align:center;z-index:50}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 @media (max-width:520px){
-  .track{font-size:13px;max-width:150px}
   .round{width:54px;height:54px}
   .face{padding:28px 20px 68px}
   .wrow{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
@@ -187,7 +182,7 @@ details summary{cursor:pointer;color:var(--soft);padding-block:6px}
   .wrow .chip{grid-column:2;grid-row:1 / span 2}
 }
 @media (prefers-reduced-motion: reduce){
-  .flip,.sw,.sw::after,.toast{transition:none}
+  .flip,.toast{transition:none}
   .card.enter{animation:none}
 }
 </style>
@@ -521,7 +516,7 @@ function startStudy(mode,idsOverride){
   const u=unit(); if(!u) return;
   let ids=idsOverride||u.words.map((_,i)=>i).filter(i=>mode==='all'||u.status[i]==='u');
   if(!ids.length){ toast('沒有可複習的單字'); return; }
-  S={queue:ids.slice(),i:0,count:{k:0,u:0},answers:{},history:[],track:S?S.track:true,flipped:false,shuffled:false,busy:false};
+  S={queue:ids.slice(),i:0,count:{k:0,u:0},answers:{},history:[],track:true,flipped:false,shuffled:false,busy:false};
   go('study');
 }
 function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -566,14 +561,13 @@ function renderStudy(){
   const card=h('div',{class:'card',role:'button',tabindex:'0','aria-label':'字卡，點一下翻面，向左滑表示會，向右滑表示不會'},
     h('div',{class:'flip'},front,back),tintGood,tintBad,tools);
   const undoBtn=h('button',{class:'undo',onclick:undo},ic('undo'),'復原');
-  const trackBtn=h('button',{class:'track',role:'switch','aria-checked':String(S.track),onclick:()=>{ S.track=!S.track; trackBtn.setAttribute('aria-checked',String(S.track)); toast(S.track?'會記錄學習進度':'不記錄，只是練習'); }},h('span',{text:'追蹤學習進度'}),h('span',{class:'sw'}));
   const noBtn=h('button',{class:'round bad','aria-label':'不會，列入待複習',onclick:()=>commit('u')},ic('x'));
   const yesBtn=h('button',{class:'round good','aria-label':'會了',onclick:()=>commit('k')},ic('check'));
   UI={card,front,back,scrub,posEl,badEl,goodEl,undoBtn,tintGood,tintBad,shuf};
   root.append(h('div',{class:'study'},
     h('div',{class:'topbar'},h('button',{class:'iconbtn','aria-label':'結束複習',onclick:()=>{ flushAll(); go('unit'); }},ic('back')),scrub,posEl,badEl,goodEl),
     h('div',{class:'stage'},card),
-    h('div',{class:'bar'},undoBtn,h('div',{class:'answer'},noBtn,yesBtn),trackBtn)));
+    h('div',{class:'bar'},undoBtn,h('div',{class:'answer'},noBtn,yesBtn),h('div'))));
   bindCard(card);
   sync(false);
 }
@@ -660,7 +654,7 @@ function renderSummary(){
   const unknownIds=S.queue.filter(id=>S.answers[id]==='u');
   const c=counts(u);
   root.append(h('div',{class:'summary'},
-    h('div',{},h('h1',{text:'這一輪完成了'}),h('p',{class:'sub',text:u.name+(S.track?'':'（未記錄進度）')})),
+    h('div',{},h('h1',{text:'這一輪完成了'}),h('p',{class:'sub',text:u.name})),
     h('div',{class:'nums'},
       h('div',{class:'stat k'},h('span',{class:'v',text:S.count.k}),h('span',{class:'l',text:'會'})),
       h('div',{class:'stat u'},h('span',{class:'v',text:S.count.u}),h('span',{class:'l',text:'不會'}))),
